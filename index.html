@@ -367,11 +367,11 @@ const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10
 
 // 기본 계좌 7개
 const DEFAULT_ACCOUNTS=[
-  {id:'acc-mf-gen', broker:'미래에셋', name:'종합계좌',    color:'#388bfd', type:'general', currency:'KRW'},
-  {id:'acc-mf-isa', broker:'미래에셋', name:'ISA',        color:'#58a6ff', type:'isa',     currency:'KRW'},
+  {id:'acc-mf-gen', broker:'미래에셋', name:'미래 종합',    color:'#388bfd', type:'general', currency:'KRW'},
+  {id:'acc-mf-isa', broker:'미래에셋', name:'ISA',         color:'#58a6ff', type:'isa',     currency:'KRW'},
   {id:'acc-mf-pen', broker:'미래에셋', name:'연금저축',    color:'#bc8cff', type:'pension', currency:'KRW'},
-  {id:'acc-mz-dom', broker:'메리츠',   name:'국내주식',    color:'#3fb950', type:'general', currency:'KRW'},
-  {id:'acc-mz-usd', broker:'메리츠',   name:'해외주식',    color:'#38d9a9', type:'general', currency:'USD'},
+  {id:'acc-mz-dom', broker:'메리츠',   name:'메리츠 국내', color:'#3fb950', type:'general', currency:'KRW'},
+  {id:'acc-mz-usd', broker:'메리츠',   name:'메리츠 해외', color:'#38d9a9', type:'general', currency:'USD'},
   {id:'acc-ts',     broker:'토스증권', name:'토스증권',    color:'#d29922', type:'general', currency:'KRW'},
 ];
 
@@ -487,6 +487,9 @@ async function loadFromSheet(){
       const savedRate=state.usdRate;
       state={...state,...data};
       if(!data.accounts||!data.accounts.length)state.accounts=DEFAULT_ACCOUNTS;
+      // 계좌 이름 마이그레이션
+      const nameMap={'종합계좌':'미래 종합','국내주식':'메리츠 국내','해외주식':'메리츠 해외'};
+      state.accounts=state.accounts.map(a=>nameMap[a.name]?{...a,name:nameMap[a.name]}:a);
       if(savedRate)state.usdRate=savedRate;
       setSyncStatus('ok','동기화 완료');
     }else{
