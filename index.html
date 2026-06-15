@@ -381,7 +381,8 @@ let state={
   dividends:[],
   currentPrices:{},
   cmaBalance:0,
-  usdRate:1380
+  usdRate:1380,
+  cashBalances:{}
 };
 
 let selectedAccId=null,tradeFilter='all',chartPnl=null,chartPie=null,chartDiv=null;
@@ -532,6 +533,15 @@ function saveCMA(){
   save();renderDashboard();
 }
 
+function saveCashBalance(accId){
+  const val=parseFloat(document.getElementById('cash-'+accId).value)||0;
+  if(!state.cashBalances)state.cashBalances={};
+  state.cashBalances[accId]=val;
+  save();
+  selectAccount(accId);
+  renderDashboard();
+}
+
 // ── 계산 헬퍼 ──
 function toKRW(amount,currency){
   return currency==='USD'?amount*(state.usdRate||1380):amount;
@@ -605,7 +615,7 @@ function copyAnalysisData(){
     if(a.currency==='USD')text+=' / 해외USD';
     text+=']\n';
     text+=`  투자금: ${Math.round(s.invested).toLocaleString()}원\n`;
-    text+=`  예수금: ${Math.round(s.cashBalance).toLocaleString()}원\n`;
+    text+=`  예수금: ${Math.round(state.cashBalances[a.id]||0).toLocaleString()}원\n`;
     text+=`  총손익: ${Math.round(s.totalPnl).toLocaleString()}원 (${fmtR(s.rate)})\n`;
     if(s.isUSD){
       text+=`  주가손익: ${Math.round(s.stockPnl).toLocaleString()}원 / 환율손익: ${Math.round(s.fxGain).toLocaleString()}원\n`;
@@ -704,7 +714,7 @@ function getAccountStats(accId){
   const isUSD=acc&&acc.currency==='USD';
   const curRate=state.usdRate||1380;
   const trades=state.trades.filter(t=>t.accountId===accId);
-  let investedKRW=0,realizedKRW=0,fxGain=0,cashBalance=0;
+  let investedKRW=0,realizedKRW=0,fxGain=0;
   const pos={};// code→{qty,costUSD,costKRW,avgBuyRate}
 
   trades.forEach(t=>{
@@ -724,7 +734,6 @@ function getAccountStats(accId){
         const sellKRW=t.price*br*t.qty-feeKRW;
         const costKRW=avgCostKRW*t.qty;
         realizedKRW+=sellKRW-costKRW;
-        cashBalance+=sellKRW;
         // 환율 손익 = (현재환율-매입환율) × 매도수량 × 매입단가USD
         const avgBuyRate=avgCostKRW/avgCostUSD;
         fxGain+=(br-avgBuyRate)*t.qty*avgCostUSD;
@@ -751,6 +760,7 @@ function getAccountStats(accId){
   const totalPnl=realizedKRW+unrealizedKRW;
   const rate=investedKRW>0?totalPnl/investedKRW*100:0;
   const stockPnl=totalPnl-(fxGain+unrealizedFX);// 순수 주가 손익
+  const cashBalance=state.cashBalances[accId]||0;
   return{
     invested:investedKRW,realized:realizedKRW,unrealized:unrealizedKRW,
     totalPnl,rate,currentVal:currentValKRW,
@@ -1160,12 +1170,21 @@ function selectAccount(id){
       <div style="font-size:11px;color:var(--text-sub)">${acc.broker} · ${isUSD?'USD 계좌':'원화 계좌'}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-      ${[['투자금(전체매입)',fmt(s.invested)+'원',''],['총 손익',(s.totalPnl>=0?'+':'')+fmt(s.totalPnl)+'원',col(s.totalPnl)],['실현손익',(s.realized>=0?'+':'')+fmt(s.realized)+'원',col(s.realized)],['평가손익',(s.unrealized>=0?'+':'')+fmt(s.unrealized)+'원',col(s.unrealized)],['예수금(매도대금)',fmt(s.cashBalance)+'원','var(--usd)'],['누적 배당',fmt(divTotal)+'원','var(--gold)']].map(([l,v,c])=>`
+      ${[['투자금(전체매입)',fmt(s.invested)+'원',''],['총 손익',(s.totalPnl>=0?'+':'')+fmt(s.totalPnl)+'원',col(s.totalPnl)],['실현손익',(s.realized>=0?'+':'')+fmt(s.realized)+'원',col(s.realized)],['평가손익',(s.unrealized>=0?'+':'')+fmt(s.unrealized)+'원',col(s.unrealized)],['누적 배당',fmt(divTotal)+'원','var(--gold)']].map(([l,v,c])=>`
       <div style="background:var(--bg-input);border-radius:7px;padding:10px">
         <div style="font-size:9px;color:var(--text-sub);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">${l}</div>
         <div style="font-size:13px;font-family:'JetBrains Mono',monospace;${c?'color:'+c:''}">${v}</div>
       </div>`).join('')}
       ${fxBox}
+    </div>
+    <div style="background:var(--bg-input);border:1px solid rgba(56,217,169,0.25);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:9px;color:var(--usd);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">💳 예수금 (증권사 앱 실잔액 직접 입력)</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="cash-${id}" value="${s.cashBalance||0}" placeholder="0"
+          style="flex:1;padding:7px 10px;font-size:13px;border-color:rgba(56,217,169,0.3);font-family:'JetBrains Mono',monospace">
+        <button onclick="saveCashBalance('${id}')" class="btn btn-primary btn-sm">저장</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-sub);margin-top:5px">배당·매도·입금이 반영된 실잔액을 그대로 입력 — 매도 시 자동 가산 안 함</div>
     </div>
     ${(()=>{
       const lhs=s.currentVal+s.cashBalance;
