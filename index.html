@@ -335,7 +335,7 @@ tbody td{padding:10px 10px}
         <div style="background:rgba(56,217,169,0.05);border:1px solid rgba(56,217,169,0.15);border-radius:8px;padding:10px 14px;margin-bottom:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <span style="font-size:11px;color:var(--usd);font-weight:600">💱 USD/KRW 환율</span>
-            <button onclick="fetchLiveRate().then(()=>renderDashboard())" style="background:rgba(56,217,169,0.15);border:1px solid rgba(56,217,169,0.3);color:var(--usd);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:600">↻ 새로고침</button>
+            <button onclick="fetchLiveRate(true).then(()=>renderDashboard())" style="background:rgba(56,217,169,0.15);border:1px solid rgba(56,217,169,0.3);color:var(--usd);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:600">↻ 새로고침</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <input type="number" id="usd-rate" placeholder="예: 1380" style="width:100px;display:inline-block;padding:5px 8px;font-size:13px;border-color:rgba(56,217,169,0.3)" onchange="saveUsdRate()">
@@ -395,19 +395,22 @@ function setSyncStatus(s,t){
 }
 
 // ── 환율 자동조회 (CORS 허용 API, 폴백: 캐시 → 수동) ──
-async function fetchLiveRate(){
-  // 캐시 확인 (24시간 이내면 재사용)
-  try{
-    const cached=localStorage.getItem('usdRateCache');
-    if(cached){
-      const {rate,ts}=JSON.parse(cached);
-      if(rate>0&&Date.now()-ts<86400000){
-        state.usdRate=rate;
-        updateRateDisplay(rate,'캐시');
-        return rate;
+// forceRefresh=true 이면 캐시 무시하고 API 직접 호출
+async function fetchLiveRate(forceRefresh=false){
+  // 캐시 확인 (24시간 이내면 재사용, 강제 새로고침 시 건너뜀)
+  if(!forceRefresh){
+    try{
+      const cached=localStorage.getItem('usdRateCache');
+      if(cached){
+        const {rate,ts}=JSON.parse(cached);
+        if(rate>0&&Date.now()-ts<86400000){
+          state.usdRate=rate;
+          updateRateDisplay(rate,'캐시');
+          return rate;
+        }
       }
-    }
-  }catch(e){}
+    }catch(e){}
+  }
 
   // API 순서대로 시도
   const apis=[
@@ -497,8 +500,9 @@ async function loadFromSheet(){
     setSyncStatus('err','오프라인');
   }
   document.getElementById('cma-amount').value=state.cmaBalance||0;
-  updateRateDisplay(state.usdRate||1380,'수동');
+  updateRateDisplay(state.usdRate||1380,'불러오는 중...');
   renderDashboard();
+  fetchLiveRate().then(()=>renderDashboard());
 }
 
 async function saveToSheet(){
