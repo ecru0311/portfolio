@@ -394,10 +394,57 @@ function setSyncStatus(s,t){
   x.textContent=t;
 }
 
-// ── 환율 (수동 입력) ──
+// ── 환율 자동조회 (CORS 허용 API, 폴백: 캐시 → 수동) ──
 async function fetchLiveRate(){
-  updateRateDisplay(state.usdRate||1380,'수동');
-  return state.usdRate||1380;
+  // 캐시 확인 (24시간 이내면 재사용)
+  try{
+    const cached=localStorage.getItem('usdRateCache');
+    if(cached){
+      const {rate,ts}=JSON.parse(cached);
+      if(rate>0&&Date.now()-ts<86400000){
+        state.usdRate=rate;
+        updateRateDisplay(rate,'캐시');
+        return rate;
+      }
+    }
+  }catch(e){}
+
+  // API 순서대로 시도
+  const apis=[
+    async()=>{
+      const r=await fetch('https://open.er-api.com/v6/latest/USD',{signal:AbortSignal.timeout(5000)});
+      const d=await r.json();
+      return d?.rates?.KRW;
+    },
+    async()=>{
+      const r=await fetch('https://api.frankfurter.app/latest?from=USD&to=KRW',{signal:AbortSignal.timeout(5000)});
+      const d=await r.json();
+      return d?.rates?.KRW;
+    },
+    async()=>{
+      const r=await fetch('https://api.exchangerate-api.com/v4/latest/USD',{signal:AbortSignal.timeout(5000)});
+      const d=await r.json();
+      return d?.rates?.KRW;
+    },
+  ];
+
+  for(const api of apis){
+    try{
+      const rate=await api();
+      if(rate&&rate>0){
+        state.usdRate=Math.round(rate*10)/10;
+        localStorage.setItem('usdRateCache',JSON.stringify({rate:state.usdRate,ts:Date.now()}));
+        updateRateDisplay(state.usdRate,'실시간');
+        save();
+        return state.usdRate;
+      }
+    }catch(e){}
+  }
+
+  // 모든 API 실패 → 수동값 유지
+  const fallback=state.usdRate||1380;
+  updateRateDisplay(fallback,'수동');
+  return fallback;
 }
 
 function updateRateDisplay(rate,label){
@@ -554,6 +601,7 @@ function copyAnalysisData(){
     if(a.currency==='USD')text+=' / 해외USD';
     text+=']\n';
     text+=`  투자금: ${Math.round(s.invested).toLocaleString()}원\n`;
+    text+=`  예수금: ${Math.round(s.cashBalance).toLocaleString()}원\n`;
     text+=`  총손익: ${Math.round(s.totalPnl).toLocaleString()}원 (${fmtR(s.rate)})\n`;
     if(s.isUSD){
       text+=`  주가손익: ${Math.round(s.stockPnl).toLocaleString()}원 / 환율손익: ${Math.round(s.fxGain).toLocaleString()}원\n`;
