@@ -564,7 +564,7 @@ function toKRW(amount,currency){
 // ── 현재가 자동 연동 ──
 async function fetchPrices(){
   const holdings=getHoldings(null);
-  if(!holdings.length)return;
+  if(!holdings.length)return{updated:0,total:0,errors:[]};
 
   // 종목 코드별로 국내/해외 분류
   const krCodes=[...new Set(holdings.filter(h=>{
@@ -578,33 +578,43 @@ async function fetchPrices(){
   }).map(h=>h.code))];
 
   let updated=0;
+  const errors=[];
 
   // 국내주식: Yahoo Finance (코스피 .KS 먼저 시도, 실패하면 코스닥 .KQ 재시도)
   for(const code of krCodes){
-    let price=null;
+    let price=null,lastErr=null;
     for(const suffix of['.KS','.KQ']){
       try{
         const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}${suffix}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
+        if(!res.ok){lastErr=`HTTP ${res.status}`;continue;}
         const data=await res.json();
         const p=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
         if(p&&p>0){price=p;break;}
-      }catch(e){}
+        lastErr='가격 없음';
+      }catch(e){lastErr=e.message;console.error(`[시세조회 실패] ${code}${suffix}:`,e);}
     }
     if(price){state.currentPrices[code]=Math.round(price);updated++;}
+    else errors.push(`${code}(국내): ${lastErr}`);
   }
 
   // 미국주식: Yahoo Finance
   for(const code of usCodes){
     try{
       const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
+      if(!res.ok){errors.push(`${code}: HTTP ${res.status}`);continue;}
       const data=await res.json();
       const price=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
       if(price&&price>0){state.currentPrices[code]=price;updated++;}
-    }catch(e){}
+      else errors.push(`${code}: 가격 없음`);
+    }catch(e){
+      console.error(`[시세조회 실패] ${code}:`,e);
+      errors.push(`${code}: ${e.message}`);
+    }
   }
 
+  if(errors.length)console.warn('시세조회 실패 목록:',errors);
   if(updated>0){save();renderDashboard();}
-  return updated;
+  return{updated,total:krCodes.length+usCodes.length,errors};
 }
 
 // 현재가 수동 업데이트 (펀드 등)
@@ -690,11 +700,22 @@ function copyAnalysisData(){
 async function fetchPricesWithFeedback(){
   const btn=document.getElementById('price-btn');
   if(btn){btn.textContent='⏳ 가져오는 중...';btn.disabled=true;}
-  const updated=await fetchPrices();
+  const result=await fetchPrices()||{updated:0,total:0,errors:[]};
+  const{updated,total,errors}=result;
   if(btn){
-    btn.textContent=updated>0?`✅ ${updated}개 업데이트`:'↻ 시세 업데이트';
+    if(updated>0&&errors.length===0){
+      btn.textContent=`✅ ${updated}개 업데이트`;
+      setTimeout(()=>{btn.textContent='↻ 시세 업데이트';},3000);
+    }else if(updated>0&&errors.length>0){
+      btn.textContent=`⚠ ${updated}/${total} 성공`;
+      console.warn('일부 시세조회 실패:',errors);
+    }else if(total>0){
+      btn.textContent='⚠ 조회 실패 (콘솔 확인)';
+      console.warn('시세조회 전체 실패:',errors);
+    }else{
+      btn.textContent='↻ 시세 업데이트';
+    }
     btn.disabled=false;
-    if(updated>0)setTimeout(()=>{btn.textContent='↻ 시세 업데이트';},3000);
   }
 }
 
