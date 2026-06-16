@@ -19,6 +19,8 @@
 - [x] 예수금 기능 추가 후 제거 — 수수료 포함 자동계산이 복잡하고 실익 적어 드롭. 필요 시 재검토.
 - [x] 환율 자동조회 복구 — open.er-api.com → frankfurter.app → exchangerate-api.com 순 시도, 24시간 캐시(localStorage), 실패 시 수동값 폴백. 앱 로딩 시 자동 실행 + 새로고침 버튼은 캐시 무시하고 강제 재조회.
 - [x] **동기화 데이터 보호 안전장치** (중요) — 구글시트 fetch 실패 + 이 기기 로컬백업도 없으면(`syncEnabled=false`) 빈 상태를 절대 구글시트에 저장하지 않음. 과거 이 가드가 없어서 휴대폰 첫 접속 시 빈 데이터로 전체 데이터가 삭제된 사고가 있었음 (구글시트 버전기록 없이 로컬 PC `localStorage.pfv4Backup`으로 겨우 복구). 환율 자동조회 성공 시 더 이상 자동 `save()` 호출 안 함(이게 사고의 직접 트리거였음).
+- [x] **시세조회를 GAS 경유 방식으로 전환** — 야후 파이낸스를 브라우저에서 직접 호출하면 CORS로 100% 차단됨. Apps Script(`GAS_URL`)의 `fetchPrices(kr, us)` 함수가 `UrlFetchApp.fetch()`로 서버에서 대신 조회(User-Agent 헤더 필수, 안 넣으면 야후가 차단). Apps Script에서 `UrlFetchApp` 첫 사용 시 `script.external_request` 권한을 별도로 승인해야 함(테스트 함수 실행 → 권한 팝업 → 허용 → 새 버전으로 재배포 필요). 코스피 `.KS` 먼저 시도, 실패하면 코스닥 `.KQ` 재시도. 클라이언트는 `fetchPricesJSONP()`로 GAS를 JSONP 호출.
+- [x] 종목코드 없는 종목(펀드 등) 처리 — 코드 없으면 종목명을 식별자로 사용해 동일 계좌 내 여러 무코드 종목이 서로 합쳐지는 버그 해결. HTML 속성에 종목명을 끼워넣을 때는 `escAttr()`로 이스케이프 + `data-` 속성 사용(특수문자로 버튼 깨지는 것 방지).
 
 ## 진행할 작업 (TODO)
 
@@ -34,4 +36,5 @@
 
 ## 참고 메모
 - 동기화 구조: 구글시트(GAS_URL, JSONP) 우선, 실패 시 `localStorage.pfv4Backup` 폴백. `syncEnabled` 플래그로 양쪽 다 비었을 때 저장 차단(데이터 보호).
+- GAS_URL이 바뀌면 `index.html`의 `const GAS_URL` 상수도 같이 갱신해야 함. Apps Script 코드 수정 시 "배포 → 배포 관리 → 편집 → 새 버전 → 배포"까지 해야 실제 URL에 반영됨(저장만 하면 반영 안 됨).
 - 작업 진행하면서 새로 정한 규칙이나 끝낸 항목은 이 파일을 갱신해 둘 것.
