@@ -362,7 +362,7 @@ tbody td{padding:10px 10px}
 
 </main>
 <script>
-const GAS_URL='https://script.google.com/macros/s/AKfycbxUpG3EcgXyfn7wTogr3wsY-9nDFXXq931V2VJyOzps5xFu6c05UZM30X8t5qwLbnZk/exec';
+const GAS_URL='https://script.google.com/macros/s/AKfycbwECQjDTNaSQ5czrWs5gEbf5iGMWgGI0ErebrIovGazwyiK5vgX3Bb9w4JlFGY4xflWow/exec';
 const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
 // 기본 계좌 7개
@@ -477,6 +477,29 @@ function loadFromSheetJSONP(){
   });
 }
 
+// ── 시세조회 (GAS 중계 - 브라우저 직접호출은 야후 CORS 차단으로 막힘) ──
+function fetchPricesJSONP(krCodes,usCodes){
+  return new Promise((resolve)=>{
+    const cbName='cbp'+Date.now();
+    const script=document.createElement('script');
+    const timer=setTimeout(()=>{
+      delete window[cbName];
+      script.remove();
+      resolve(null);
+    },15000);
+    window[cbName]=(data)=>{
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+      resolve(data);
+    };
+    const params=new URLSearchParams({action:'prices',kr:krCodes.join(','),us:usCodes.join(','),callback:cbName});
+    script.src=GAS_URL+'?'+params.toString();
+    script.onerror=()=>{clearTimeout(timer);delete window[cbName];resolve(null);};
+    document.head.appendChild(script);
+  });
+}
+
 // 구글시트 저장을 허용해도 되는 상태인지 (둘 다 비어있으면 절대 덮어쓰지 않음 - 데이터 보호)
 let syncEnabled=true;
 
@@ -577,44 +600,35 @@ async function fetchPrices(){
     return acc&&acc.currency==='USD'&&h.code;
   }).map(h=>h.code))];
 
+  const total=krCodes.length+usCodes.length;
+  if(total===0)return{updated:0,total:0,errors:[]};
+
   let updated=0;
   const errors=[];
 
-  // 국내주식: Yahoo Finance (코스피 .KS 먼저 시도, 실패하면 코스닥 .KQ 재시도)
-  for(const code of krCodes){
-    let price=null,lastErr=null;
-    for(const suffix of['.KS','.KQ']){
-      try{
-        const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}${suffix}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
-        if(!res.ok){lastErr=`HTTP ${res.status}`;continue;}
-        const data=await res.json();
-        const p=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if(p&&p>0){price=p;break;}
-        lastErr='가격 없음';
-      }catch(e){lastErr=e.message;console.error(`[시세조회 실패] ${code}${suffix}:`,e);}
+  // 야후를 브라우저에서 직접 호출하면 CORS로 막히므로 GAS(Apps Script)를 통해 중계 조회
+  try{
+    const prices=await fetchPricesJSONP(krCodes,usCodes);
+    if(prices){
+      krCodes.forEach(code=>{
+        if(prices[code]){state.currentPrices[code]=Math.round(prices[code]);updated++;}
+        else errors.push(`${code}(국내): 가격 없음`);
+      });
+      usCodes.forEach(code=>{
+        if(prices[code]){state.currentPrices[code]=prices[code];updated++;}
+        else errors.push(`${code}: 가격 없음`);
+      });
+    }else{
+      errors.push('GAS 응답 없음(타임아웃 또는 배포 URL 확인 필요)');
     }
-    if(price){state.currentPrices[code]=Math.round(price);updated++;}
-    else errors.push(`${code}(국내): ${lastErr}`);
-  }
-
-  // 미국주식: Yahoo Finance
-  for(const code of usCodes){
-    try{
-      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
-      if(!res.ok){errors.push(`${code}: HTTP ${res.status}`);continue;}
-      const data=await res.json();
-      const price=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if(price&&price>0){state.currentPrices[code]=price;updated++;}
-      else errors.push(`${code}: 가격 없음`);
-    }catch(e){
-      console.error(`[시세조회 실패] ${code}:`,e);
-      errors.push(`${code}: ${e.message}`);
-    }
+  }catch(e){
+    console.error('[시세조회 실패]',e);
+    errors.push(e.message);
   }
 
   if(errors.length)console.warn('시세조회 실패 목록:',errors);
   if(updated>0){save();renderDashboard();}
-  return{updated,total:krCodes.length+usCodes.length,errors};
+  return{updated,total,errors};
 }
 
 // 현재가 수동 업데이트 (펀드 등)
