@@ -584,7 +584,7 @@ async function fetchPrices(){
     let price=null;
     for(const suffix of['.KS','.KQ']){
       try{
-        const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}${suffix}?interval=1d&range=1d`);
+        const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}${suffix}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
         const data=await res.json();
         const p=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
         if(p&&p>0){price=p;break;}
@@ -596,7 +596,7 @@ async function fetchPrices(){
   // 미국주식: Yahoo Finance
   for(const code of usCodes){
     try{
-      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}?interval=1d&range=1d`);
+      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}?interval=1d&range=1d&_=${Date.now()}`,{cache:'no-store'});
       const data=await res.json();
       const price=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
       if(price&&price>0){state.currentPrices[code]=price;updated++;}
