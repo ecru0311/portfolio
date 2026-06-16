@@ -579,15 +579,18 @@ async function fetchPrices(){
 
   let updated=0;
 
-  // 국내주식: Yahoo Finance (KRX)
+  // 국내주식: Yahoo Finance (코스피 .KS 먼저 시도, 실패하면 코스닥 .KQ 재시도)
   for(const code of krCodes){
-    try{
-      const symbol=code+'.KS';
-      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`);
-      const data=await res.json();
-      const price=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if(price&&price>0){state.currentPrices[code]=Math.round(price);updated++;}
-    }catch(e){}
+    let price=null;
+    for(const suffix of['.KS','.KQ']){
+      try{
+        const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}${suffix}?interval=1d&range=1d`);
+        const data=await res.json();
+        const p=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if(p&&p>0){price=p;break;}
+      }catch(e){}
+    }
+    if(price){state.currentPrices[code]=Math.round(price);updated++;}
   }
 
   // 미국주식: Yahoo Finance
