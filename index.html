@@ -438,7 +438,6 @@ async function fetchLiveRate(forceRefresh=false){
         state.usdRate=Math.round(rate*10)/10;
         localStorage.setItem('usdRateCache',JSON.stringify({rate:state.usdRate,ts:Date.now()}));
         updateRateDisplay(state.usdRate,'실시간');
-        save();
         return state.usdRate;
       }
     }catch(e){}
@@ -478,6 +477,9 @@ function loadFromSheetJSONP(){
   });
 }
 
+// 구글시트 저장을 허용해도 되는 상태인지 (둘 다 비어있으면 절대 덮어쓰지 않음 - 데이터 보호)
+let syncEnabled=true;
+
 async function loadFromSheet(){
   setSyncStatus('syncing','불러오는 중...');
   try{
@@ -490,17 +492,31 @@ async function loadFromSheet(){
       const nameMap={'종합계좌':'미래 종합','국내주식':'메리츠 국내','해외주식':'메리츠 해외'};
       state.accounts=state.accounts.map(a=>nameMap[a.name]?{...a,name:nameMap[a.name]}:a);
       if(savedRate)state.usdRate=savedRate;
+      syncEnabled=true;
       setSyncStatus('ok','동기화 완료');
     }else{
       // 구글 시트 실패시 로컬 백업
       const local=localStorage.getItem('pfv4Backup');
-      if(local){try{const d=JSON.parse(local);state={...state,...d};}catch(e){}}
-      setSyncStatus('ok','로컬 저장소');
+      if(local){
+        try{const d=JSON.parse(local);state={...state,...d};}catch(e){}
+        syncEnabled=true;
+        setSyncStatus('ok','로컬 저장소');
+      }else{
+        // 구글시트도 실패, 이 기기에 로컬백업도 없음 → 진짜 빈 상태인지 알 수 없으니 절대 덮어쓰지 않음
+        syncEnabled=false;
+        setSyncStatus('err','⚠ 동기화 차단(데이터 보호) — 새로고침 재시도');
+      }
     }
   }catch(e){
     const local=localStorage.getItem('pfv4Backup');
-    if(local){try{const d=JSON.parse(local);state={...state,...d};}catch(e2){}}
-    setSyncStatus('err','오프라인');
+    if(local){
+      try{const d=JSON.parse(local);state={...state,...d};}catch(e2){}
+      syncEnabled=true;
+      setSyncStatus('err','오프라인(로컬 저장됨)');
+    }else{
+      syncEnabled=false;
+      setSyncStatus('err','⚠ 동기화 차단(데이터 보호) — 새로고침 재시도');
+    }
   }
   document.getElementById('cma-amount').value=state.cmaBalance||0;
   updateRateDisplay(state.usdRate||1380,'불러오는 중...');
@@ -510,6 +526,10 @@ async function loadFromSheet(){
 
 async function saveToSheet(){
   localStorage.setItem('pfv4Backup',JSON.stringify(state));
+  if(!syncEnabled){
+    setSyncStatus('err','⚠ 동기화 차단됨 — 새로고침 후 재시도');
+    return;
+  }
   setSyncStatus('syncing','저장 중...');
   try{
     await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'save',payload:state})});
