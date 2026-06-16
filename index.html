@@ -699,8 +699,9 @@ function getHoldings(accountId){
   const trades=accountId?state.trades.filter(t=>t.accountId===accountId):state.trades;
   const map={};
   trades.forEach(t=>{
-    const key=t.code+'_'+t.accountId;
-    if(!map[key])map[key]={name:t.name,code:t.code,accountId:t.accountId,qty:0,costUSD:0,costKRW:0};
+    const effCode=t.code||t.name;// 종목코드 없으면 종목명을 식별자로 사용(동일 계좌 내 무코드 종목 충돌 방지)
+    const key=effCode+'_'+t.accountId;
+    if(!map[key])map[key]={name:t.name,code:effCode,accountId:t.accountId,qty:0,costUSD:0,costKRW:0};
     const acc=state.accounts.find(a=>a.id===t.accountId);
     const isUSD=acc&&acc.currency==='USD';
     const br=t.buyRate||state.usdRate||1380;
@@ -733,26 +734,27 @@ function getAccountStats(accId){
   trades.forEach(t=>{
     const br=t.buyRate||curRate;// 매입 환율
     const feeKRW=t.feeCurrency==='USD'?(t.fee||0)*br:(t.fee||0);
-    if(!pos[t.code])pos[t.code]={qty:0,costUSD:0,costKRW:0};
+    const ck=t.code||t.name;// 종목코드 없으면 종목명을 식별자로 사용(동일 계좌 내 무코드 종목 충돌 방지)
+    if(!pos[ck])pos[ck]={qty:0,costUSD:0,costKRW:0};
     if(t.type==='buy'){
       const tradeKRW=isUSD?(t.qty*t.price*br+feeKRW):(t.qty*t.price+feeKRW);
-      pos[t.code].qty+=t.qty;
-      pos[t.code].costUSD+=isUSD?(t.qty*t.price+(t.feeCurrency==='USD'?t.fee:0)):0;
-      pos[t.code].costKRW+=tradeKRW;
+      pos[ck].qty+=t.qty;
+      pos[ck].costUSD+=isUSD?(t.qty*t.price+(t.feeCurrency==='USD'?t.fee:0)):0;
+      pos[ck].costKRW+=tradeKRW;
       investedKRW+=tradeKRW;
     } else {
-      if(pos[t.code].qty>0){
-        const avgCostUSD=pos[t.code].costUSD/pos[t.code].qty;
-        const avgCostKRW=pos[t.code].costKRW/pos[t.code].qty;// 평균 원화 매입단가(환율 포함)
+      if(pos[ck].qty>0){
+        const avgCostUSD=pos[ck].costUSD/pos[ck].qty;
+        const avgCostKRW=pos[ck].costKRW/pos[ck].qty;// 평균 원화 매입단가(환율 포함)
         const sellKRW=t.price*br*t.qty-feeKRW;
         const costKRW=avgCostKRW*t.qty;
         realizedKRW+=sellKRW-costKRW;
         // 환율 손익 = (현재환율-매입환율) × 매도수량 × 매입단가USD
         const avgBuyRate=avgCostKRW/avgCostUSD;
         fxGain+=(br-avgBuyRate)*t.qty*avgCostUSD;
-        pos[t.code].qty-=t.qty;
-        pos[t.code].costUSD-=avgCostUSD*t.qty;
-        pos[t.code].costKRW-=avgCostKRW*t.qty;
+        pos[ck].qty-=t.qty;
+        pos[ck].costUSD-=avgCostUSD*t.qty;
+        pos[ck].costKRW-=avgCostKRW*t.qty;
       }
     }
   });
