@@ -794,6 +794,8 @@ function getDividendStats(){
 }
 
 const fmt=n=>{const a=Math.abs(n);if(a>=1e8)return(n/1e8).toFixed(1)+'억';if(a>=1e4)return Math.round(n/1e4)+'만';return Math.round(n).toLocaleString()};
+// HTML 속성에 안전하게 끼워넣기 위한 이스케이프 (종목코드 없을 때 종목명이 들어갈 수 있어서 특수문자 방지용)
+const escAttr=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;');
 const fmtFull=n=>Math.round(n).toLocaleString();
 const fmtR=r=>(r>=0?'+':'')+r.toFixed(2)+'%';
 const col=v=>v>0?'var(--gain)':v<0?'var(--loss)':'var(--neutral)';
@@ -880,7 +882,7 @@ function renderDashboard(){
   if(!h.length){document.getElementById('holdings-table').innerHTML='<div class="empty"><div class="empty-icon">📈</div>보유 종목이 없습니다</div>';return;}
   document.getElementById('holdings-table').innerHTML=`<div class="trades-wrap"><table>
     <thead><tr><th>종목</th><th>계좌</th><th>수량</th><th>평균단가</th><th>현재가</th><th>평가금액(₩)</th><th>주가손익</th><th>환율손익</th><th>총손익</th><th>수익률</th></tr></thead>
-    <tbody>${h.map(hh=>{
+    <tbody>${h.map((hh,hIdx)=>{
       const acc=state.accounts.find(a=>a.id===hh.accountId);
       const isUSD=acc&&acc.currency==='USD';
       const curRate=state.usdRate||1380;
@@ -901,8 +903,8 @@ function renderDashboard(){
         <td class="mono">${isUSD?'$'+avgUSD.toFixed(2):'₩'+Math.round(avgKRW).toLocaleString()}${isUSD?`<div style="font-size:9px;color:var(--text-sub)">매입환율 ₩${Math.round(avgBuyRate).toLocaleString()}</div>`:''}</td>
         <td>${noPrice?
           `<div style="display:flex;gap:4px;align-items:center">
-            <input type="number" placeholder="직접입력" style="width:80px;padding:3px 6px;font-size:11px;border-color:rgba(210,153,34,0.4)" id="price-${hh.code}-${hh.accountId}">
-            <button onclick="updateCurrentPrice('${hh.code}',document.getElementById('price-${hh.code}-${hh.accountId}').value)" style="background:rgba(210,153,34,0.2);border:1px solid rgba(210,153,34,0.3);color:var(--gold);border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer">입력</button>
+            <input type="number" placeholder="직접입력" style="width:80px;padding:3px 6px;font-size:11px;border-color:rgba(210,153,34,0.4)" id="price-input-${hIdx}">
+            <button data-code="${escAttr(hh.code)}" onclick="updateCurrentPrice(this.dataset.code,document.getElementById('price-input-${hIdx}').value)" style="background:rgba(210,153,34,0.2);border:1px solid rgba(210,153,34,0.3);color:var(--gold);border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer">입력</button>
           </div>`:
           `<span class="mono">${isUSD?'$':'₩'}${cur.toLocaleString()}</span>`
         }</td>
