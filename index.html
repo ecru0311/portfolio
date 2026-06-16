@@ -592,7 +592,7 @@ async function fetchPrices(){
   // 종목 코드별로 국내/해외 분류
   const krCodes=[...new Set(holdings.filter(h=>{
     const acc=state.accounts.find(a=>a.id===h.accountId);
-    return acc&&acc.currency==='KRW'&&h.code&&h.code.length===6&&/^\d+$/.test(h.code);
+    return acc&&acc.currency==='KRW'&&h.code&&h.code.length===6&&/^[0-9A-Za-z]+$/.test(h.code);
   }).map(h=>h.code))];
 
   const usCodes=[...new Set(holdings.filter(h=>{
